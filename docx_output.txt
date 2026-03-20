@@ -1,0 +1,356 @@
+MedVault DeFi
+Decentralized Medical Data Verification & Marketplace
+Powered by Hedera Hashgraph
+
+PROJECT SPECIFICATION DOCUMENT
+Version 1.0   |   Hedera Hackathon 2025
+
+1. Executive Summary
+MedVault DeFi is a blockchain-powered medical data platform built on the Hedera Hashgraph network. It creates a trusted ecosystem where patients securely store and share their medical records, family history, and diagnostic results — and where verified doctors can authenticate that data using Hedera-based micro-transactions. Authenticated records are then available for purchase within a decentralized marketplace, enabling healthcare research, insurance underwriting, and clinical decision support while preserving patient privacy and consent.
+
+Core Value Proposition
+Patients control their medical data. Doctors earn HBAR for verified attestations. Researchers and insurers access high-integrity health datasets — all governed by Hedera smart contracts with full auditability.
+
+2. Problem Statement
+The global healthcare system suffers from three critical data challenges:
+
+Medical records are siloed across hospitals, clinics, and labs with no portable, patient-owned format.
+There is no trusted, decentralized mechanism for a doctor to attest to the authenticity of a patient's records.
+High-quality, consented medical datasets are scarce for researchers and insurers, limiting innovation.
+
+MedVault DeFi addresses all three gaps by combining decentralised identity (DID), Hedera Token Service (HTS), and smart contract logic into a seamless, consumer-grade web application.
+
+3. Project Overview
+3.1 Platform Name & Branding
+Attribute
+Detail
+Platform Name
+MedVault DeFi
+Tagline
+Your Health Data, Verified on Chain
+Blockchain
+Hedera Hashgraph (Testnet → Mainnet)
+Token
+HBAR (native) + custom MedVault Token (MVT)
+Target Region
+Global — mobile-first, low-bandwidth optimised
+Hackathon Track
+DeFi / Healthcare / Social Impact
+
+3.2 Primary User Roles
+The platform is designed around two primary actors:
+
+Role
+Responsibilities
+Patient
+Uploads medical PDFs / PNG images, manages consent, sells data in marketplace
+Doctor
+Creates a verified professional account, reviews & attests patient records, earns HBAR
+Admin (Platform)
+Manages doctor credential onboarding, sets base verification fee parameters
+Data Buyer (Future)
+Accesses anonymised, consented datasets via marketplace smart contract
+
+4. Core Features
+4.1 Patient Account & Data Upload
+Self-sovereign identity registration using Hedera DID standard.
+Upload medical documents: PDF reports, PNG scan images, lab results, family history files.
+Files encrypted client-side (AES-256) before storage on IPFS; only the IPFS CID hash is anchored on Hedera via HCS (Hedera Consensus Service).
+Patient dashboard: view upload history, verification status, consent toggles, and HBAR earnings.
+Consent management: grant or revoke data access per doctor or per buyer at any time.
+
+4.2 Doctor Account & Credentialing
+Doctors register with a medical licence number, specialty, and jurisdiction.
+Platform admin reviews and approves credentials off-chain; approval mints a soulbound NFT (non-transferable) to the doctor's Hedera wallet as a verifiable credential.
+Doctor dashboard: view pending verification requests, earnings ledger, and completed attestations.
+Each doctor has a publicly visible Trust Score (0–100) computed from: volume of verifications, dispute rate, and peer ratings.
+
+4.3 Verification Engine (Hedera-Powered)
+The verification flow is the core innovation of MedVault DeFi:
+
+Step
+Actor
+Description
+Step 1
+Patient submits record
+Patient selects a document and requests doctor verification, locking a small HBAR escrow in the smart contract.
+Step 2
+Doctor reviews
+Doctor receives the encrypted document link, decrypts using shared key, and reviews the clinical content.
+Step 3
+Attestation
+Doctor submits an on-chain attestation via HCS message, confirming authenticity, document type, and date.
+Step 4
+Fee Settlement
+Smart contract releases the verification fee (in HBAR) to the doctor's wallet, minus a 2% platform fee.
+Step 5
+Record Sealed
+Record receives a Verified badge. The HCS topic ID serves as the immutable proof-of-verification anchor.
+
+4.4 Verification Fee Model
+Doctors set their own per-document verification fee within a range enforced by the platform smart contract. This creates a reputation-driven market where more trusted doctors can charge premium fees.
+
+Parameter
+Value
+Minimum Fee
+0.5 HBAR per document verification
+Maximum Fee (Standard)
+50 HBAR per document verification
+Premium Doctors (Trust Score 80+)
+Up to 200 HBAR per verification
+Platform Commission
+2% of each verification fee
+Patient Escrow
+Fee locked in contract until doctor submits attestation
+Dispute Window
+48 hours — patient may dispute before funds released
+
+4.5 Medical Data Marketplace
+Verified records become eligible for listing in the MedVault Marketplace after patient opts in.
+Patients set a sale price in HBAR for individual records, or subscribe buyers to a data stream.
+Buyer (researcher, insurer, pharma) pays via Hedera smart contract; patient receives 92% revenue, platform retains 8%.
+All sold data is anonymised — PII stripped before delivery — with the anonymisation hash anchored on-chain.
+Smart contract enforces data usage licences: research-only, commercial, or educational tiers.
+
+5. Technical Architecture
+5.1 Technology Stack
+Layer
+Technology
+Frontend
+React.js + Tailwind CSS (Web), React Native (Mobile)
+Backend API
+Node.js / Express — stateless microservices
+Blockchain
+Hedera Hashgraph — HCS, HTS, Smart Contracts (EVM-compatible)
+Smart Contracts
+Solidity, deployed via Hedera EVM
+Decentralised Storage
+IPFS (via Web3.Storage or Pinata) for encrypted file blobs
+Identity
+Hedera DID Method for patient & doctor DIDs
+Database (off-chain index)
+PostgreSQL — stores metadata, indices, user profiles (no raw medical data)
+Auth
+JWT + wallet signature challenge (MetaMask-compatible Hedera wallet)
+Encryption
+AES-256-GCM client-side before IPFS upload; ECDH key exchange for sharing
+
+5.2 Smart Contract Modules
+VerificationEscrow.sol — manages HBAR escrow, fee release, and dispute logic.
+DoctorRegistry.sol — stores approved doctor addresses, trust scores, and fee schedules.
+DataMarketplace.sol — handles record listings, purchases, licence enforcement, and revenue splits.
+PatientConsent.sol — records granular consent grants and revocations on-chain.
+
+5.3 Hedera Services Used
+Service
+Usage
+Hedera Consensus Service (HCS)
+Anchors document upload events, doctor attestations, and consent changes as immutable topic messages.
+Hedera Token Service (HTS)
+Mints soulbound NFTs for doctor credentials; future MVT fungible token for governance.
+Hedera Smart Contract Service
+Hosts all Solidity contracts for escrow, marketplace, and registry logic.
+Hedera Mirror Node API
+Powers real-time transaction history in patient and doctor dashboards.
+Hedera File Service (HFS)
+Stores smart contract bytecode and small metadata files on-chain.
+
+6. Detailed User Flows
+6.1 Patient Registration & Upload Flow
+Patient visits MedVault DeFi and clicks Create Account.
+Patient connects a Hedera-compatible wallet (HashPack, Blade) or creates a custodial wallet via email.
+A Hedera DID is auto-generated and associated with the wallet address.
+Patient completes basic profile: name, date of birth, country (stored off-chain, hashed on-chain).
+Patient uploads medical file (PDF or PNG). The app encrypts the file client-side and uploads to IPFS.
+The IPFS CID and document metadata are published to a private HCS topic owned by the patient.
+Patient selects a doctor from the marketplace and requests verification, locking the fee in escrow.
+
+6.2 Doctor Registration Flow
+Doctor visits MedVault DeFi and clicks Create Doctor Account.
+Doctor submits: full name, medical licence number, issuing country, specialty, and wallet address.
+Platform admin verifies credentials against national medical licence registries (manual or API-based).
+Upon approval, platform mints a soulbound NFT to the doctor's wallet via HTS — this is their on-chain credential badge.
+Doctor sets their verification fee (within platform limits) and specialty tags.
+Doctor profile is published to the marketplace, visible to patients searching for verifiers.
+
+7. Data Marketplace Design
+The MedVault Marketplace is a permissioned, consent-first exchange for verified medical data. Only records that have received at least one doctor attestation are eligible for listing. The marketplace is governed by the DataMarketplace.sol smart contract on Hedera EVM.
+
+7.1 Listing Categories
+Category
+Buyer Use Case
+Family History Reports
+Genetic predispositions, hereditary conditions — valuable for insurance risk models.
+Diagnostic Lab Results
+Blood panels, pathology, radiology findings — useful for clinical AI training.
+Imaging Studies (PNG/DICOM)
+X-rays, MRI, CT scans — high demand for medical imaging AI datasets.
+Longitudinal Health Records
+Multi-year patient timelines — premium category for pharmaceutical research.
+Vaccination & Allergy Records
+Public health and travel medicine use cases.
+
+7.2 Doctor as Data Buyer — In-Platform Read Access (MVP)
+Doctors are first-class buyers in the MedVault marketplace. Unlike external researchers who download raw files, doctors interact with a secure in-browser viewer — they can read, annotate, and save records to their account without ever downloading the underlying file. Every access event is fully auditable on Hedera.
+
+Key Design Principle: Read Without Download
+When a doctor purchases a patient record, the platform decrypts the file in a sandboxed iframe viewer inside the doctor dashboard. The raw file bytes are never exposed to the browser file system. The doctor sees the document; they never hold the document.
+
+7.2.1 Doctor Data Purchase Flow (MVP)
+Doctor browses the Marketplace, filtered by specialty, document type, or condition tag.
+Doctor views the anonymised listing: document type, patient age range, condition category, verification status, and price in HBAR. No PII is shown at this stage.
+Doctor clicks Purchase Record. The DataMarketplace smart contract is triggered, locking the HBAR payment from the doctor's connected wallet.
+Smart contract executes an atomic HBAR transfer: 92% routed directly to the patient's Hedera wallet, 8% to the platform treasury — all in a single transaction.
+Upon confirmed payment, the patient's encrypted file decryption key is shared with the doctor's wallet via a one-time ECDH key exchange — scoped only to this purchase.
+The file is fetched from IPFS and decrypted in the doctor's sandboxed in-browser viewer (iframe with Content-Security-Policy: no download, no clipboard). No file is written to disk.
+The purchase is added to the doctor's Purchased Records library in their dashboard. They can re-open the in-browser viewer any time using their wallet key — no re-payment required.
+An HCS message is published to the patient's topic confirming the sale: buyer DID, timestamp, transaction ID, and exact HBAR amount received.
+
+7.2.2 Doctor's Purchased Records Dashboard
+Feature
+Description
+Purchased Records Library
+Persistent list of all records the doctor has bought, organised by date, category, and patient pseudonym.
+In-Browser Viewer
+Secure sandboxed iframe renders PDF or PNG — no download button, no print, no clipboard access.
+Re-access Anytime
+Doctor reopens any purchased record via wallet key — no expiry, no re-payment after initial purchase.
+Private Annotations
+Doctor can add private clinical notes to a purchased record, stored encrypted in their account only.
+Provenance Badge
+Each record shows its Hedera HCS verification proof: topic ID, attestation timestamp, and attesting doctor credential NFT.
+Patient Payment Receipt
+Each purchase entry shows the exact HBAR transferred to the patient and the Hedera transaction ID.
+
+7.2.3 Instant HBAR Transfer to Patient Wallet
+Payment to the patient is not batched, delayed, or held in escrow — it is atomic and immediate. The DataMarketplace.sol contract executes the revenue split in a single Hedera contract call:
+
+Smart Contract Logic — DataMarketplace.sol
+function purchaseRecord(address patientWallet, uint256 price) external payable {
+    require(msg.value == price, 'Incorrect payment');
+    uint256 platformFee = (price * 8) / 100;
+    uint256 patientShare = price - platformFee;
+    payable(patientWallet).transfer(patientShare);    // instant to patient
+    payable(platformTreasury).transfer(platformFee);  // platform cut
+    emit RecordPurchased(msg.sender, patientWallet, price, patientShare);
+}
+
+The patient wallet receives HBAR within 3-5 seconds of the doctor confirming purchase — Hedera deterministic finality guarantees this.
+The patient dashboard shows a real-time HBAR earnings notification with buyer specialty (not identity) and transaction amount.
+The patient can withdraw or spend their HBAR balance at any time — no lock-up or vesting period applies.
+
+7.3 Revenue Distribution
+Stakeholder
+Revenue Share
+Patient (Data Owner)
+92% of sale proceeds — transferred atomically to patient Hedera wallet at moment of purchase.
+Platform (MedVault)
+8% protocol fee — transferred atomically to platform treasury at moment of purchase.
+Doctor (Data Buyer)
+Pays full listing price in HBAR. Earns separate income from verification fees — not from resale rights.
+Smart Contract Gas
+Covered by a small slippage buffer in the listing price — patient always receives exactly 92%.
+
+8. Security & Privacy Model
+All medical files are encrypted AES-256-GCM before leaving the patient's browser — MedVault never sees raw medical data.
+Encryption keys are stored in the patient's wallet, never on MedVault servers.
+Doctor access is temporary: the patient shares a one-time decryption key scoped to the verification request.
+All access events are logged as HCS messages for full auditability.
+GDPR & HIPAA design principles followed: data minimisation, purpose limitation, and right to deletion (patient can delete IPFS pin and revoke all consents).
+Smart contracts are open-source and will undergo a third-party security audit before mainnet launch.
+
+Privacy by Design
+No raw PII is ever stored on-chain. Hedera anchors only hashes, CIDs, and attestation proofs. The platform cannot access, read, or sell patient data without an explicit, patient-signed smart contract consent transaction.
+
+9. Token Economy
+9.1 HBAR Usage
+Verification fees: paid by patient, received by doctor, processed by Hedera smart contract.
+Marketplace purchases: data buyers pay in HBAR; patients receive HBAR proceeds.
+Platform fees: a percentage of all transactions is collected in HBAR to fund operations.
+
+9.2 MedVault Token (MVT) — Future Governance Layer
+Post-hackathon, a fungible governance token (MVT) will be introduced via HTS to enable:
+Community governance: MVT holders vote on fee parameters, doctor onboarding policies, and marketplace rules.
+Staking rewards: doctors and patients who contribute consistently earn MVT bonuses.
+DAO treasury: platform fees partially converted to MVT and held in a multi-sig community treasury.
+
+10. Development Roadmap
+Phase
+Deliverables
+Phase 1 — Hackathon MVP
+Patient upload + IPFS storage + HCS anchoring. Doctor account creation + soulbound NFT minting. Verification escrow smart contract on Hedera Testnet. Doctor marketplace purchase flow with in-browser record viewer (no download). Atomic HBAR transfer to patient wallet on purchase. Basic React web UI for both user roles.
+Phase 2 — Beta (Month 2–3)
+Full marketplace smart contract. Doctor Trust Score algorithm. Mobile app (React Native). Anonymisation pipeline for marketplace data.
+Phase 3 — Mainnet Launch (Month 4–6)
+Hedera Mainnet deployment. Third-party smart contract audit. Integration with 2 medical licence verification APIs. MVT governance token launch.
+Phase 4 — Scale (Month 7–12)
+Data buyer SDK for enterprise integration. DICOM imaging support. Cross-chain bridge to Ethereum for broader buyer access. DAO transition.
+
+11. Team & Roles
+Role
+Responsibilities
+Project Lead / Product
+Overall vision, UX design, stakeholder management, and hackathon presentation.
+Blockchain Developer
+Solidity smart contracts, Hedera SDK integration (HCS, HTS, EVM), wallet connection.
+Frontend Developer
+React.js web app, patient and doctor dashboards, marketplace UI.
+Backend Developer
+Node.js API, IPFS integration, encryption layer, mirror node queries.
+Medical Advisor
+Clinical accuracy review, HIPAA/GDPR compliance guidance, doctor onboarding criteria.
+
+12. Why Hedera Hashgraph?
+MedVault DeFi chose Hedera for four decisive technical reasons:
+
+Advantage
+Why It Matters for MedVault
+Deterministic Finality
+Hedera transactions reach finality in 3–5 seconds with no probabilistic risk — critical for medical attestations that must be certain.
+Low, Predictable Fees
+Hedera fees are denominated in USD cents, not subject to gas price spikes. Patients in low-income markets can afford verification.
+Hedera Consensus Service
+HCS provides a tamper-proof, ordered log of events — perfect for immutable medical record provenance without storing data on-chain.
+Energy Efficiency
+Hedera is carbon-negative. A healthcare platform should not run on energy-intensive proof-of-work infrastructure.
+
+13. Hackathon Judging Criteria Alignment
+Criterion
+MedVault DeFi Response
+Innovation
+First platform to combine Hedera DID, HCS provenance, and a doctor credentialing NFT system for medical data.
+Technical Depth
+Uses HCS, HTS, and Hedera EVM smart contracts — three distinct Hedera services working in concert.
+Social Impact
+Empowers patients in under-served markets to monetise health data; incentivises doctors to participate in data quality.
+Market Viability
+Addresses a $50B+ global health data market with a real revenue model and clear stakeholder incentives.
+Presentation Quality
+Modular architecture, clean UI mock-ups, and a live Testnet demo of the verification flow.
+
+14. Glossary
+Term
+Definition
+HCS
+Hedera Consensus Service — immutable, ordered message log on Hedera.
+HTS
+Hedera Token Service — native token minting and management on Hedera.
+HBAR
+The native cryptocurrency of the Hedera Hashgraph network.
+DID
+Decentralised Identifier — a self-sovereign identity standard (W3C).
+IPFS
+InterPlanetary File System — decentralised file storage network.
+CID
+Content Identifier — unique hash that addresses a file on IPFS.
+Soulbound NFT
+A non-transferable NFT used as an on-chain credential badge.
+Escrow
+HBAR held in a smart contract until verification is confirmed.
+MVT
+MedVault Token — future governance token for the platform DAO.
+AES-256-GCM
+Advanced Encryption Standard — used for client-side file encryption.
+
+MedVault DeFi — Built for Hedera Hackathon 2025
+Trustless Health Data. Verified on Chain. Owned by You.

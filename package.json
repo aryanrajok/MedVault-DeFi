@@ -1,0 +1,18 @@
+{
+  "name": "medvault-defi",
+  "version": "1.0.0",
+  "description": "Decentralized Medical Data Verification & Marketplace on Hedera Hashgraph",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "install:all": "npm install && cd contracts && npm install && cd ../backend && npm install && cd ../frontend && npm install",
+    "compile": "cd contracts && npx hardhat compile",
+    "deploy": "cd contracts && npx hardhat run scripts/deploy.js --network hedera_testnet",
+    "test:contracts": "cd contracts && npx hardhat test"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

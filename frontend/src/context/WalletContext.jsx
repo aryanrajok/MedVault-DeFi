@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 
 const WalletContext = createContext();
 
@@ -12,31 +12,57 @@ const HEDERA_TESTNET = {
 };
 
 /**
- * Check if HashPack extension is installed
+ * Check if HashPack extension is installed — comprehensive detection
+ * HashPack can inject itself via multiple globals depending on version.
  */
 function isHashPackInstalled() {
-  if (typeof window.hashpack !== 'undefined') return true;
-  if (typeof window.hederaWallets !== 'undefined') return true;
+  try {
+    // 1. Check direct HashPack globals
+    if (typeof window.hashpack !== 'undefined') return true;
+    if (typeof window.HashpackProvider !== 'undefined') return true;
+    if (typeof window.hederaWallets !== 'undefined') return true;
 
-  if (typeof window.ethereum !== 'undefined') {
-    const providers = window.ethereum.providers || [];
-    for (const p of providers) {
-      if (p.isHashPack) return true;
-      if (!p.isMetaMask && !p.isPhantom && !p.isBraveWallet && !p.isCoinbaseWallet) return true;
+    // 2. Check EIP-6963 announced providers (modern standard)
+    if (window.__hashpackAnnounced) return true;
+
+    // 3. Check the ethereum providers array
+    if (typeof window.ethereum !== 'undefined') {
+      const providers = window.ethereum.providers || [];
+      for (const p of providers) {
+        if (p.isHashPack) return true;
+      }
+      // Check main ethereum object
+      if (window.ethereum.isHashPack) return true;
     }
-    if (window.ethereum.isHashPack) return true;
+
+    return false;
+  } catch {
+    return false;
   }
-  return false;
 }
 
 /**
  * Check if MetaMask is installed (excluding Phantom imposters)
  */
 function isMetaMaskInstalled() {
-  if (typeof window.ethereum === 'undefined') return false;
-  const providers = window.ethereum.providers || [];
-  if (providers.find((p) => p.isMetaMask && !p.isPhantom)) return true;
-  return window.ethereum.isMetaMask && !window.ethereum.isPhantom;
+  try {
+    if (typeof window.ethereum === 'undefined') return false;
+    const providers = window.ethereum.providers || [];
+    if (providers.find((p) => p.isMetaMask && !p.isPhantom)) return true;
+    return window.ethereum.isMetaMask && !window.ethereum.isPhantom;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Run a wallet detection snapshot — returns current status
+ */
+function snapshotWalletStatus() {
+  return {
+    metamask: isMetaMaskInstalled(),
+    hashpack: isHashPackInstalled(),
+  };
 }
 
 /**
@@ -55,16 +81,23 @@ function getProvider(preferredWallet) {
   }
 
   if (preferredWallet === 'hashpack') {
-    // Try HashPack-specific provider first
+    // 1. Try HashPack-specific provider in providers array
     const hp = providers.find((p) => p.isHashPack);
     if (hp) return hp;
+
+    // 2. Check main window.ethereum
     if (window.ethereum.isHashPack) return window.ethereum;
 
-    // Try any non-MetaMask, non-Phantom provider
-    const other = providers.find((p) => !p.isPhantom && !p.isMetaMask && !p.isBraveWallet);
+    // 3. Check EIP-6963 discovered providers
+    if (window.__hashpackEIP6963Provider) return window.__hashpackEIP6963Provider;
+
+    // 4. Try any non-MetaMask, non-Phantom, non-BraveWallet, non-Coinbase provider
+    const other = providers.find((p) =>
+      !p.isPhantom && !p.isMetaMask && !p.isBraveWallet && !p.isCoinbaseWallet
+    );
     if (other) return other;
 
-    // If main ethereum isn't MetaMask or Phantom, it might be HashPack
+    // 5. If main ethereum isn't MetaMask or Phantom, it might be HashPack
     if (!window.ethereum.isMetaMask && !window.ethereum.isPhantom) return window.ethereum;
 
     // We do NOT fallback to MetaMask. If the user clicked HashPack, they want HashPack.
@@ -79,13 +112,25 @@ function getProvider(preferredWallet) {
 }
 
 /**
- * Detect installed wallets — always show both options for Hedera dApp
+ * Wait briefly for a provider to become available (extensions inject async)
  */
-function detectWallets() {
-  return [
-    { id: 'metamask', name: 'MetaMask', icon: '🦊', installed: isMetaMaskInstalled() },
-    { id: 'hashpack', name: 'HashPack', icon: '🟣', installed: isHashPackInstalled() },
-  ];
+function waitForProvider(walletId, timeoutMs = 2000) {
+  return new Promise((resolve) => {
+    const provider = getProvider(walletId);
+    if (provider) {
+      resolve(provider);
+      return;
+    }
+
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const p = getProvider(walletId);
+      if (p || Date.now() - startTime > timeoutMs) {
+        clearInterval(interval);
+        resolve(p || null);
+      }
+    }, 200);
+  });
 }
 
 export function WalletProvider({ children }) {
@@ -98,6 +143,85 @@ export function WalletProvider({ children }) {
   const [error, setError] = useState(null);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [pendingRole, setPendingRole] = useState(null);
+
+  // ── Real-time wallet detection state ──
+  const [walletStatus, setWalletStatus] = useState(() => snapshotWalletStatus());
+  const pollRef = useRef(null);
+
+  // Poll for wallet extension injection (extensions load asynchronously)
+  useEffect(() => {
+    // Immediately take a snapshot
+    setWalletStatus(snapshotWalletStatus());
+
+    // Poll every 500ms for the first 10 seconds, then every 2 seconds
+    let elapsed = 0;
+    const tick = () => {
+      const newStatus = snapshotWalletStatus();
+      setWalletStatus((prev) => {
+        // Only update state if something changed (avoids unnecessary re-renders)
+        if (prev.metamask !== newStatus.metamask || prev.hashpack !== newStatus.hashpack) {
+          return newStatus;
+        }
+        return prev;
+      });
+      elapsed += elapsed < 10000 ? 500 : 2000;
+    };
+
+    // Fast polling phase (0–10s) — extensions may take a moment to inject
+    pollRef.current = setInterval(tick, 500);
+
+    // After 10s, slow down to every 2s
+    const slowdownTimeout = setTimeout(() => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(tick, 2000);
+    }, 10000);
+
+    // Stop polling after 60s — if wallets haven't loaded by then, they're not installed
+    const stopTimeout = setTimeout(() => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    }, 60000);
+
+    // Listen for EIP-6963 wallet announcements (modern standard)
+    const handleEIP6963 = (event) => {
+      const info = event?.detail?.info;
+      const provider = event?.detail?.provider;
+      if (info && provider) {
+        const rdns = (info.rdns || '').toLowerCase();
+        const name = (info.name || '').toLowerCase();
+        if (rdns.includes('hashpack') || name.includes('hashpack')) {
+          window.__hashpackAnnounced = true;
+          window.__hashpackEIP6963Provider = provider;
+          setWalletStatus((prev) => (prev.hashpack ? prev : { ...prev, hashpack: true }));
+        }
+        if (rdns.includes('metamask') || name.includes('metamask')) {
+          setWalletStatus((prev) => (prev.metamask ? prev : { ...prev, metamask: true }));
+        }
+      }
+    };
+
+    window.addEventListener('eip6963:announceProvider', handleEIP6963);
+
+    // Also dispatch a request for announcements (triggers wallets to announce)
+    try {
+      window.dispatchEvent(new Event('eip6963:requestProvider'));
+    } catch { /* ignore */ }
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      clearTimeout(slowdownTimeout);
+      clearTimeout(stopTimeout);
+      window.removeEventListener('eip6963:announceProvider', handleEIP6963);
+    };
+  }, []);
+
+  // Build the detectWallets array from reactive state
+  const detectedWallets = [
+    { id: 'metamask', name: 'MetaMask', icon: '🦊', installed: walletStatus.metamask },
+    { id: 'hashpack', name: 'HashPack', icon: '🟣', installed: walletStatus.hashpack },
+  ];
+
+  // Keep detectWallets as a function for backward compatibility, but use reactive state
+  const detectWallets = useCallback(() => detectedWallets, [walletStatus]);
 
   // Persist
   useEffect(() => {
@@ -159,6 +283,9 @@ export function WalletProvider({ children }) {
     setConnecting(false);
     setPendingRole(selectedRole || null);
 
+    // Refresh wallet detection when modal opens
+    setWalletStatus(snapshotWalletStatus());
+
     // Always show wallet picker modal — let the user choose
     setShowWalletModal(true);
   }, []);
@@ -169,12 +296,11 @@ export function WalletProvider({ children }) {
   const connectWithProvider = async (walletId, selectedRole) => {
     setConnecting(true);
     setError(null);
-    // Keep modal open during connection — don't close it yet
 
-    const provider = getProvider(walletId);
+    // Wait for the provider to become available (handles late injection)
+    const provider = await waitForProvider(walletId, 3000);
 
     if (!provider) {
-      // Wallet not installed — show install links
       setError(
         walletId === 'metamask'
           ? 'MetaMask not detected. Please install MetaMask and refresh.'
@@ -187,8 +313,7 @@ export function WalletProvider({ children }) {
     }
 
     try {
-      // Step 1: Request accounts FIRST — this triggers the wallet popup
-      // (doing this before chain switch avoids the "request pending" error)
+      // Step 1: Request accounts — this triggers the wallet popup (HashPack or MetaMask)
       const accounts = await provider.request({
         method: 'eth_requestAccounts',
       });
@@ -197,22 +322,30 @@ export function WalletProvider({ children }) {
         throw new Error('No accounts returned. Unlock your wallet and try again.');
       }
 
-      // Step 2: Now switch to or add Hedera Testnet
-      try {
-        await provider.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: HEDERA_TESTNET.chainId }],
-        });
-      } catch (switchError) {
-        if (switchError.code === 4902 || switchError.code === -32603) {
+      // Step 2: Switch to Hedera Testnet (only for MetaMask)
+      // HashPack is Hedera-native — it doesn't need/support wallet_switchEthereumChain
+      // and calling it can cause errors or unexpected popups
+      if (walletId !== 'hashpack') {
+        try {
           await provider.request({
-            method: 'wallet_addEthereumChain',
-            params: [HEDERA_TESTNET],
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: HEDERA_TESTNET.chainId }],
           });
-        } else if (switchError.code === 4001) {
-          throw new Error('You rejected switching to Hedera Testnet.');
+        } catch (switchError) {
+          if (switchError.code === 4902 || switchError.code === -32603) {
+            try {
+              await provider.request({
+                method: 'wallet_addEthereumChain',
+                params: [HEDERA_TESTNET],
+              });
+            } catch (addError) {
+              console.warn('Could not add Hedera Testnet chain:', addError);
+            }
+          } else if (switchError.code === 4001) {
+            throw new Error('You rejected switching to Hedera Testnet.');
+          }
+          // Other errors: ignore and continue (wallet may already be on correct chain)
         }
-        // Other errors: ignore and continue (wallet may already be on correct chain)
       }
 
       const address = accounts[0];
@@ -230,8 +363,15 @@ export function WalletProvider({ children }) {
       }
 
       // Step 4: Get chain ID
-      const chainId = await provider.request({ method: 'eth_chainId' });
-      const isHederaTestnet = chainId === HEDERA_TESTNET.chainId;
+      let chainId = HEDERA_TESTNET.chainId;
+      let isHederaTestnet = true;
+      try {
+        chainId = await provider.request({ method: 'eth_chainId' });
+        isHederaTestnet = chainId === HEDERA_TESTNET.chainId;
+      } catch (e) {
+        // HashPack may not support eth_chainId — default to Hedera Testnet
+        console.warn('Could not fetch chainId:', e);
+      }
 
       const walletData = {
         address,
@@ -309,6 +449,8 @@ export function WalletProvider({ children }) {
       shortenAddress,
       updateBalance,
       detectWallets,
+      detectedWallets,
+      walletStatus,
       isConnected: !!wallet,
       isHederaTestnet: wallet?.isHederaTestnet || false,
     }}>

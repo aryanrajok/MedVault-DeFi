@@ -29,13 +29,14 @@ export default function WalletModal() {
     connecting,
     error,
     pendingRole,
-    detectWallets,
+    detectedWallets,
   } = useWallet();
   const navigate = useNavigate();
 
   if (!showWalletModal) return null;
 
-  const installedWallets = detectWallets();
+  // detectedWallets is reactive state — auto-updates as extensions inject
+  const installedWallets = detectedWallets || [];
 
   const handleSelect = async (walletId) => {
     const isInstalled = installedWallets.find(w => w.id === walletId)?.installed;
@@ -49,6 +50,8 @@ export default function WalletModal() {
 
     const result = await connectWithProvider(walletId, pendingRole);
     if (result) {
+      // Brief delay to let the wallet extension popup dismiss itself
+      await new Promise((r) => setTimeout(r, 300));
       navigate(pendingRole === 'doctor' ? '/doctor' : '/patient');
     }
   };
@@ -107,11 +110,16 @@ export default function WalletModal() {
                   gap: 16,
                   textAlign: 'left',
                   width: '100%',
-                  border: '1px solid var(--border-glass)',
-                  background: 'var(--glass-bg)',
+                  border: isInstalled
+                    ? `1px solid ${option.color}55`
+                    : '1px solid var(--border-glass)',
+                  background: isInstalled
+                    ? `${option.color}08`
+                    : 'var(--glass-bg)',
                   color: 'var(--text-primary)',
                   fontFamily: 'Inter, sans-serif',
                   opacity: connecting ? 0.6 : 1,
+                  transition: 'all 0.3s ease',
                 }}
               >
                 {/* Wallet Icon */}
@@ -139,10 +147,26 @@ export default function WalletModal() {
                   </div>
                 </div>
 
-                {/* Badge — only "Detected" when actually verified, otherwise "Connect →" */}
+                {/* Badge — real-time detection status */}
                 <div style={{ flexShrink: 0 }}>
                   {isInstalled ? (
-                    <span className="badge badge-verified" style={{ fontSize: 10 }}>
+                    <span
+                      className="badge badge-verified"
+                      style={{
+                        fontSize: 10,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <span style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        background: 'var(--accent-green, #22c55e)',
+                        display: 'inline-block',
+                        animation: 'pulse-dot 2s ease-in-out infinite',
+                      }} />
                       Detected
                     </span>
                   ) : (
@@ -202,6 +226,15 @@ export default function WalletModal() {
           <br /><span style={{ color: 'var(--accent-teal)' }}>Network: Hedera Testnet (Chain ID 296)</span>
         </div>
       </div>
+
+      {/* Inline keyframes for pulse-dot animation */}
+      <style>{`
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.7); }
+        }
+      `}</style>
     </div>
   );
 }
+

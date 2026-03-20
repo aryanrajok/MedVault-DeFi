@@ -1,0 +1,7 @@
+use for reference 
+https://hellofuturehackathon.dev/resources
+https://docs.hedera.com/hedera/sdks-and-apis/sdks
+https://docs.hedera.com/hedera/getting-started-hedera-native-developers
+https://docs.hedera.com/hedera/core-concepts
+https://docs.hedera.com/hedera/core-concepts/smart-contracts
+https://docs.hedera.com/mcp
